@@ -119,10 +119,13 @@ void dhtTask(void *parameter) {
     float temp = dht.readTemperature();
     float humi = dht.readHumidity();
     bool ok = (!isnan(temp) && !isnan(humi));
+    float corrTemp = temp + DHT_TEMP_OFFSET;
+    float corrHumi = humi + DHT_HUMID_OFFSET;
+    corrHumi = constrain(corrHumi, 0.0f, 100.0f);
 
     if (xSemaphoreTake(dhtMutex, 20 / portTICK_PERIOD_MS)) {
-      dhtTemp = ok ? temp : dhtTemp;
-      dhtHumidity = ok ? humi : dhtHumidity;
+      dhtTemp = ok ? corrTemp : dhtTemp;
+      dhtHumidity = ok ? corrHumi : dhtHumidity;
       dhtValid = ok;
       xSemaphoreGive(dhtMutex);
     }
@@ -135,8 +138,10 @@ void dhtTask(void *parameter) {
     }
 
     if (ok) {
-      Serial.printf("[%s] [DHT22] Temp: %.1f°C  Humidity: %.1f%%\n",
-                    getDateTimeString().c_str(), temp, humi);
+      Serial.printf("[%s] [DHT22] Temp: %.1f°C (raw %.1f)  Humidity: %.1f%% "
+                    "(raw %.1f%%)\n",
+                    getDateTimeString().c_str(), corrTemp, temp, corrHumi,
+                    humi);
     } else {
       Serial.printf("[%s] [WARN] DHT22 read failed!\n",
                     getDateTimeString().c_str());
