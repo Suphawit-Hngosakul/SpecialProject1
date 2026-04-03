@@ -10,14 +10,18 @@ U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2(U8G2_R2, U8X8_PIN_NONE);
 RTC_DS3231 rtc;
 
 // ========== Mutexes ==========
+SemaphoreHandle_t luxMutex;
 SemaphoreHandle_t uvMutex;
 SemaphoreHandle_t dhtMutex;
 SemaphoreHandle_t oledMutex;
 SemaphoreHandle_t gpsMutex;
-SemaphoreHandle_t luxMutex;
 SemaphoreHandle_t sdMutex;
+SemaphoreHandle_t wireMutex;
 
 // ========== Shared Sensor State ==========
+float luxValue = 0.0f;
+bool  luxValid = false;
+
 float uvVoltage = 0.0f, uvIndex = 0.0f;
 bool uvValid = false;
 
@@ -29,9 +33,6 @@ uint8_t gpsSats = 0;
 float gpsHdop = 99.9f;
 bool gpsValid = false;
 
-float luxValue = 0.0f;
-bool luxValid = false;
-
 // ========== OLED Display State ==========
 float displaySPL = 0.0;
 bool displayRecording = false;
@@ -40,8 +41,8 @@ uint64_t displaySDFree = 0;
 double displayLat = 0.0, displayLng = 0.0;
 bool displayGPSValid = false;
 uint8_t displaySats = 0;
-float displayLux = 0.0;
-bool displayLuxValid = false;
+float displayLux = 0.0f;
+bool  displayLuxValid = false;
 float displayUVIndex = 0.0f;
 bool displayUVValid = false;
 float displayTemp = 0.0f, displayHumidity = 0.0f;

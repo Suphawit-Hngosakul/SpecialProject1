@@ -51,12 +51,13 @@ extern U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2;
 extern RTC_DS3231 rtc;
 
 // ========== Mutexes ==========
+extern SemaphoreHandle_t luxMutex;
 extern SemaphoreHandle_t uvMutex;
 extern SemaphoreHandle_t dhtMutex;
 extern SemaphoreHandle_t oledMutex;
 extern SemaphoreHandle_t gpsMutex;
-extern SemaphoreHandle_t luxMutex;
 extern SemaphoreHandle_t sdMutex;
+extern SemaphoreHandle_t wireMutex;
 
 // ========== Shared Sensor State ==========
 extern float uvVoltage, uvIndex;
@@ -71,7 +72,7 @@ extern float gpsHdop;
 extern bool gpsValid;
 
 extern float luxValue;
-extern bool luxValid;
+extern bool  luxValid;
 
 // ========== OLED Display State ==========
 extern float displaySPL;
@@ -82,7 +83,7 @@ extern double displayLat, displayLng;
 extern bool displayGPSValid;
 extern uint8_t displaySats;
 extern float displayLux;
-extern bool displayLuxValid;
+extern bool  displayLuxValid;
 extern float displayUVIndex;
 extern bool displayUVValid;
 extern float displayTemp, displayHumidity;
@@ -114,7 +115,7 @@ extern uint32_t totalBytesWritten;
 // ========== Mutex-safe Sensor Read Helpers ==========
 GPSData readGPSSafe();
 LuxData readLuxSafe();
-UVData readUVSafe();
+UVData  readUVSafe();
 DHTData readDHTSafe();
 
 #endif // GLOBALS_H

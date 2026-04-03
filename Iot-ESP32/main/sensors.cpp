@@ -8,7 +8,7 @@ bool initBH1750() {
     Serial.println("[WARN] BH1750 not found! Check wiring & address.");
     return false;
   }
-  Serial.println("[INFO] BH1750 initialized (CONTINUOUS_HIGH_RES_MODE).");
+  Serial.println("[INFO] BH1750 initialized.");
   return true;
 }
 
@@ -48,25 +48,63 @@ float voltageToUVIndex(float voltageMV) {
 }
 
 // ========== Light Sensor Task (Core 0) ==========
+// ใช้ CONTINUOUS mode เหมือน test code ที่ทำงานได้นิ่ง
+// sensor วัดเองตลอด ไม่ต้อง trigger → wireMutex ถูกยึดสั้นมาก (แค่ตอนอ่าน)
 void luxTask(void *parameter) {
-  Serial.printf("[%s] [INFO] Lux Task started (correction=%.2f)\n",
-                getDateTimeString().c_str(), LUX_CORRECTION);
+  Serial.printf("[%s] [INFO] Lux Task started (slope=%.3f offset=%.1f)\n",
+                getDateTimeString().c_str(), LUX_CAL_SLOPE, LUX_CAL_OFFSET);
+
+  const float LUX_EMA_ALPHA = 0.15f;
+  const float LUX_DEADBAND  = 3.0f;
+  float emaLux = 0.0f;
+  bool  emaInit = false;
 
   while (1) {
-    float rawLux = lightMeter.readLightLevel();
-    bool ok = (rawLux >= 0.0f);
-    float lux = ok ? rawLux * LUX_CORRECTION : 0.0f;
-
-    if (xSemaphoreTake(luxMutex, 20 / portTICK_PERIOD_MS)) {
-      luxValue = lux;
-      luxValid = ok;
-      xSemaphoreGive(luxMutex);
+    // เช็ค measurementReady — เหมือน test code
+    bool ready = false;
+    if (xSemaphoreTake(wireMutex, 150 / portTICK_PERIOD_MS)) {
+      ready = lightMeter.measurementReady();
+      xSemaphoreGive(wireMutex);
     }
 
-    if (xSemaphoreTake(oledMutex, 10 / portTICK_PERIOD_MS)) {
-      displayLux = luxValue;
-      displayLuxValid = luxValid;
-      xSemaphoreGive(oledMutex);
+    if (ready) {
+      float rawLux = -1.0f;
+      if (xSemaphoreTake(wireMutex, 150 / portTICK_PERIOD_MS)) {
+        rawLux = lightMeter.readLightLevel();
+        xSemaphoreGive(wireMutex);
+      }
+
+      bool ok = (rawLux >= 0.0f);
+      if (ok) {
+        // 2-point linear calibration
+        float calibrated = rawLux * LUX_CAL_SLOPE + LUX_CAL_OFFSET;
+        if (calibrated < 0.0f) calibrated = 0.0f;
+
+        if (!emaInit) {
+          emaLux = calibrated;
+          emaInit = true;
+        } else {
+          emaLux = LUX_EMA_ALPHA * calibrated + (1.0f - LUX_EMA_ALPHA) * emaLux;
+        }
+
+        if (xSemaphoreTake(luxMutex, 20 / portTICK_PERIOD_MS)) {
+          if (!luxValid || fabsf(emaLux - luxValue) >= LUX_DEADBAND)
+            luxValue = emaLux;
+          luxValid = true;
+          xSemaphoreGive(luxMutex);
+        }
+      } else {
+        if (xSemaphoreTake(luxMutex, 20 / portTICK_PERIOD_MS)) {
+          luxValid = false;
+          xSemaphoreGive(luxMutex);
+        }
+      }
+
+      if (xSemaphoreTake(oledMutex, 10 / portTICK_PERIOD_MS)) {
+        displayLux = luxValue;
+        displayLuxValid = luxValid;
+        xSemaphoreGive(oledMutex);
+      }
     }
 
     vTaskDelay(200 / portTICK_PERIOD_MS);
@@ -113,7 +151,7 @@ void dhtTask(void *parameter) {
   Serial.printf("[%s] [INFO] DHT22 Task started (GPIO %d)\n",
                 getDateTimeString().c_str(), DHT_PIN);
 
-  vTaskDelay(3000 / portTICK_PERIOD_MS); // Wait for sensor stabilization
+  vTaskDelay(3000 / portTICK_PERIOD_MS);
 
   while (1) {
     float temp = dht.readTemperature();
@@ -137,12 +175,7 @@ void dhtTask(void *parameter) {
       xSemaphoreGive(oledMutex);
     }
 
-    if (ok) {
-      Serial.printf("[%s] [DHT22] Temp: %.1f°C (raw %.1f)  Humidity: %.1f%% "
-                    "(raw %.1f%%)\n",
-                    getDateTimeString().c_str(), corrTemp, temp, corrHumi,
-                    humi);
-    } else {
+    if (!ok) {
       Serial.printf("[%s] [WARN] DHT22 read failed!\n",
                     getDateTimeString().c_str());
     }

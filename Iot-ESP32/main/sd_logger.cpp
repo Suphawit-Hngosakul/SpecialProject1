@@ -3,8 +3,7 @@
 #include "globals.h"
 #include "rtc_helper.h"
 
-// ========== Save SPL + GPS + Lux + UV + DHT to CSV ==========
-// Uses mutex-safe read helpers to eliminate duplicated mutex code
+// ========== Save SPL + GPS + UV + DHT to CSV ==========
 void saveSPLValue(float splValue) {
   GPSData g = readGPSSafe();
   LuxData l = readLuxSafe();
@@ -40,7 +39,7 @@ void sdProcessTask(void *parameter) {
     if (xQueueReceive(readyQueue, &blk, 100 / portTICK_PERIOD_MS) == pdTRUE) {
       unsigned long currentTime = millis();
 
-      // ---- Start New Recording (goto removed, using if-else) ----
+      // ---- Start New Recording ----
       if (!isRecording) {
         bool sdHasSpace = true;
         if (xSemaphoreTake(sdMutex, 50 / portTICK_PERIOD_MS)) {

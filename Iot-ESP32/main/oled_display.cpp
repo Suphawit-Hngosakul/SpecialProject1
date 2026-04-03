@@ -9,18 +9,18 @@ void initOLED() {
   u8g2.begin();
   u8g2.clearBuffer();
   u8g2.setFont(u8g2_font_6x10_tf);
-  u8g2.drawStr(0, 28, "SPL+GPS+Lux+UV+DHT");
+  u8g2.drawStr(0, 28, "SPL+GPS+UV+DHT");
   u8g2.drawStr(25, 45, "Starting...");
   u8g2.sendBuffer();
   Serial.println("[INFO] OLED SH1106 initialized.");
 }
 
-// ========== OLED Layout (5 rows, all small font) ==========
-//  Row 1: Date+Time       (font 5x7)
-//  Row 2: REC + dB SPL    (font 5x7)
-//  Row 3: Lux + UV        (font 5x7)
-//  Row 4: Temp + Humidity  (font 5x7)
-//  Row 5: GPS coords+Sats (font 4x6)
+// ========== OLED Layout (5 rows) ==========
+//  Row 1: Date+Time
+//  Row 2: dB SPL + REC
+//  Row 3: Lux + UV
+//  Row 4: Temp + Humidity
+//  Row 5: GPS coords+Sats
 
 void oledTask(void *parameter) {
   char timeBuf[24];
@@ -66,7 +66,11 @@ void oledTask(void *parameter) {
 
     // ---- Row 1: Date + Time ----
     if (rtcAvailable) {
-      DateTime oledNow = rtc.now();
+      DateTime oledNow;
+      if (xSemaphoreTake(wireMutex, 50 / portTICK_PERIOD_MS)) {
+        oledNow = rtc.now();
+        xSemaphoreGive(wireMutex);
+      }
       snprintf(timeBuf, sizeof(timeBuf), "%02d/%02d/%04d %02d:%02d:%02d",
                oledNow.day(), oledNow.month(), oledNow.year(), oledNow.hour(),
                oledNow.minute(), oledNow.second());
@@ -74,29 +78,19 @@ void oledTask(void *parameter) {
       snprintf(timeBuf, sizeof(timeBuf), "uptime: %lus", millis() / 1000);
     }
 
-    // ---- Row 2: REC + dB SPL ----
+    // ---- Row 2: dB SPL + REC ----
     if (rec) {
-      snprintf(recSplBuf, sizeof(recSplBuf), "REC(%lu/%ds) %.1fdB", elapsed,
-               RECORD_TIME, spl);
+      snprintf(recSplBuf, sizeof(recSplBuf), "%.1fdB  REC(%lu/%ds)", spl,
+               elapsed, RECORD_TIME);
     } else {
-      snprintf(recSplBuf, sizeof(recSplBuf), "IDLE %lluMB  %.1fdB", sdFree,
-               spl);
+      snprintf(recSplBuf, sizeof(recSplBuf), "%.1fdB  IDLE %lluMB", spl, sdFree);
     }
 
     // ---- Row 3: Lux + UV ----
-    if (luxOk) {
-      if (lux >= 10000.0f)
-        snprintf(luxUvBuf, sizeof(luxUvBuf), "Lux:%.0f", lux);
-      else if (lux >= 100.0f)
-        snprintf(luxUvBuf, sizeof(luxUvBuf), "Lux:%.1f", lux);
-      else
-        snprintf(luxUvBuf, sizeof(luxUvBuf), "Lux:%.2f", lux);
-    } else {
-      snprintf(luxUvBuf, sizeof(luxUvBuf), "Lux:Err");
-    }
-    char uvPart[14];
-    snprintf(uvPart, sizeof(uvPart), "  UV:%.1f", uvOk ? uvIdx : 0.0f);
-    strncat(luxUvBuf, uvPart, sizeof(luxUvBuf) - strlen(luxUvBuf) - 1);
+    if (luxOk)
+      snprintf(luxUvBuf, sizeof(luxUvBuf), "Lux:%.1f UV:%.1f", lux, uvOk ? uvIdx : 0.0f);
+    else
+      snprintf(luxUvBuf, sizeof(luxUvBuf), "Lux:--- UV:%.1f", uvOk ? uvIdx : 0.0f);
 
     // ---- Row 4: Temp + Humidity ----
     if (dhtOk) {
@@ -120,12 +114,7 @@ void oledTask(void *parameter) {
     u8g2.drawHLine(0, 9, 128);
 
     u8g2.setFont(u8g2_font_5x7_tf);
-    if (rec && (millis() / 500) % 2 == 0) {
-      u8g2.drawDisc(3, 16, 2);
-      u8g2.drawStr(8, 19, recSplBuf);
-    } else {
-      u8g2.drawStr(0, 19, recSplBuf);
-    }
+    u8g2.drawStr(0, 19, recSplBuf);
     u8g2.drawHLine(0, 21, 128);
 
     u8g2.setFont(u8g2_font_5x7_tf);
@@ -139,7 +128,11 @@ void oledTask(void *parameter) {
     u8g2.setFont(u8g2_font_4x6_tf);
     u8g2.drawStr(0, 54, gpsBuf);
 
-    u8g2.sendBuffer();
+    if (xSemaphoreTake(wireMutex, 100 / portTICK_PERIOD_MS)) {
+      u8g2.sendBuffer();
+      xSemaphoreGive(wireMutex);
+    }
+
     vTaskDelay(200 / portTICK_PERIOD_MS);
   }
 }
