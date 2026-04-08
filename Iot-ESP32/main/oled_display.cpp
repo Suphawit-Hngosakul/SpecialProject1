@@ -66,14 +66,20 @@ void oledTask(void *parameter) {
 
     // ---- Row 1: Date + Time ----
     if (rtcAvailable) {
-      DateTime oledNow;
+      DateTime oledNow(2000, 1, 1, 0, 0, 0); // fallback ถ้า mutex timeout
+      bool timeOk = false;
       if (xSemaphoreTake(wireMutex, 50 / portTICK_PERIOD_MS)) {
         oledNow = rtc.now();
+        timeOk = true;
         xSemaphoreGive(wireMutex);
       }
-      snprintf(timeBuf, sizeof(timeBuf), "%02d/%02d/%04d %02d:%02d:%02d",
-               oledNow.day(), oledNow.month(), oledNow.year(), oledNow.hour(),
-               oledNow.minute(), oledNow.second());
+      if (timeOk) {
+        snprintf(timeBuf, sizeof(timeBuf), "%02d/%02d/%04d %02d:%02d:%02d",
+                 oledNow.day(), oledNow.month(), oledNow.year(), oledNow.hour(),
+                 oledNow.minute(), oledNow.second());
+      } else {
+        snprintf(timeBuf, sizeof(timeBuf), "--/--/---- --:--:--");
+      }
     } else {
       snprintf(timeBuf, sizeof(timeBuf), "uptime: %lus", millis() / 1000);
     }
@@ -133,6 +139,6 @@ void oledTask(void *parameter) {
       xSemaphoreGive(wireMutex);
     }
 
-    vTaskDelay(200 / portTICK_PERIOD_MS);
+    vTaskDelay(OLED_REFRESH_MS / portTICK_PERIOD_MS);
   }
 }

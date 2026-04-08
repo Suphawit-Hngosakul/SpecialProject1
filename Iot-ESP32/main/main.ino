@@ -40,9 +40,9 @@ void setup() {
   // ---- SD Card Init ----
   Serial.printf("[%s] [INFO] Initializing SD_MMC...\n",
                 getDateTimeString().c_str());
-  pinMode(2, INPUT_PULLUP);
-  pinMode(15, INPUT_PULLUP);
-  pinMode(14, INPUT_PULLUP);
+  pinMode(SDMMC_DAT0_PIN, INPUT_PULLUP);
+  pinMode(SDMMC_CMD_PIN,  INPUT_PULLUP);
+  pinMode(SDMMC_CLK_PIN,  INPUT_PULLUP);
   delay(100);
 
   if (!SD_MMC.begin("/sdcard", true, false, 4000)) {
@@ -93,10 +93,10 @@ void setup() {
 
   if (!freeQueue || !readyQueue || !sdMutex || !oledMutex || !gpsMutex ||
       !luxMutex || !uvMutex || !dhtMutex || !wireMutex) {
-    Serial.printf("[%s] [ERROR] Failed to create Queue/Mutex!\n",
+    Serial.printf("[%s] [ERROR] Failed to create Queue/Mutex! Restarting...\n",
                   getDateTimeString().c_str());
-    while (1)
-      delay(1000);
+    delay(3000);
+    ESP.restart(); // restart แทน infinite loop — watchdog ทำงานได้ถูกต้อง
   }
 
   for (int i = 0; i < AUDIO_POOL_SIZE; i++) {

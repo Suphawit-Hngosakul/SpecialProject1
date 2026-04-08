@@ -61,13 +61,13 @@ volatile uint32_t audioDropCount = 0;
 File audioFile;
 char wavFileName[64];
 char dbFileName[64];
-float currentSPL = 0.0;
+volatile float currentSPL = 0.0;
 unsigned long lastDbSave = 0;
 float rmsAccumulator = 0.0f;
 int rmsCount = 0;
 float smoothSPL = 0.0f;
 bool splInitialized = false;
-bool isRecording = false;
+volatile bool isRecording = false;
 unsigned long recordStartTime = 0;
 uint32_t totalBytesWritten = 0;
 

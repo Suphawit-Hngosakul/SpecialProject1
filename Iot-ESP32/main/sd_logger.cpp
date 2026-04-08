@@ -41,7 +41,7 @@ void sdProcessTask(void *parameter) {
 
       // ---- Start New Recording ----
       if (!isRecording) {
-        bool sdHasSpace = true;
+        bool sdHasSpace = false; // default false — ต้องได้รับการยืนยันจาก mutex
         if (xSemaphoreTake(sdMutex, 50 / portTICK_PERIOD_MS)) {
           uint64_t freeMB =
               (SD_MMC.totalBytes() - SD_MMC.usedBytes()) / (1024 * 1024);
@@ -52,6 +52,9 @@ void sdProcessTask(void *parameter) {
                 "[%s] [WARN] SD free < %dMB, skipping new recording\n",
                 getDateTimeString().c_str(), SD_MIN_FREE_MB);
           }
+        } else {
+          Serial.printf("[%s] [WARN] sdMutex timeout — skipping recording start\n",
+                        getDateTimeString().c_str());
         }
 
         if (sdHasSpace) {
@@ -137,8 +140,9 @@ void sdProcessTask(void *parameter) {
 
       // ---- Save to CSV ----
       if (currentTime - lastDbSave >= DB_INTERVAL) {
-        saveSPLValue(currentSPL);
-        lastDbSave = currentTime;
+        if (splInitialized) // ข้ามถ้า SPL ยังไม่ได้คำนวณครั้งแรก (ป้องกัน log 0.0 dB)
+          saveSPLValue(currentSPL);
+        lastDbSave = currentTime; // อัปเดตเสมอ ป้องกัน burst save เมื่อ SPL พร้อม
       }
 
       // ---- Update OLED shared state ----

@@ -102,13 +102,13 @@ extern volatile uint32_t audioDropCount;
 extern File audioFile;
 extern char wavFileName[64];
 extern char dbFileName[64];
-extern float currentSPL;
+extern volatile float currentSPL;   // เขียนโดย sdProcessTask, อ่านโดย loop() — volatile ป้องกัน compiler cache
 extern unsigned long lastDbSave;
 extern float rmsAccumulator;
 extern int rmsCount;
 extern float smoothSPL;
 extern bool splInitialized;
-extern bool isRecording;
+extern volatile bool isRecording;    // เขียนโดย sdProcessTask, อ่านโดย loop() — volatile
 extern unsigned long recordStartTime;
 extern uint32_t totalBytesWritten;
 

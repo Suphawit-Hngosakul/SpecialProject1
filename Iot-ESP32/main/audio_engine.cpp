@@ -56,7 +56,22 @@ void micTask(void *parameter) {
   Serial.printf("[%s] [INFO] [Core 1] Starting I2S...\n",
                 getDateTimeString().c_str());
   i2s_install();
-  i2s_channel_enable(rx_handle);
+
+  // Guard: ถ้า i2s_install() ล้มเหลว rx_handle จะยัง NULL
+  if (rx_handle == NULL) {
+    Serial.printf("[%s] [ERROR] [Core 1] I2S handle null — task abort\n",
+                  getDateTimeString().c_str());
+    vTaskDelete(NULL);
+    return;
+  }
+
+  esp_err_t enErr = i2s_channel_enable(rx_handle);
+  if (enErr != ESP_OK) {
+    Serial.printf("[%s] [ERROR] [Core 1] i2s_channel_enable failed: %d\n",
+                  getDateTimeString().c_str(), enErr);
+    vTaskDelete(NULL);
+    return;
+  }
 
   int32_t *rawBuffer = (int32_t *)malloc(BUFFER_LEN * sizeof(int32_t));
   if (!rawBuffer) {
@@ -94,5 +109,6 @@ void micTask(void *parameter) {
     }
     vTaskDelay(1);
   }
-  free(rawBuffer);
+  // หมายเหตุ: free(rawBuffer) ไม่ถูกเรียกในการทำงานปกติ (while loop ไม่มี exit)
+  // ถ้าต้องการรองรับ task cancellation ในอนาคต ให้เพิ่ม vTaskDelete notification ที่นี่
 }
