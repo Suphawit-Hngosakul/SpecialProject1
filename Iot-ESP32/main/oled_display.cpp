@@ -3,16 +3,46 @@
 #include "rtc_helper.h"
 
 // ========== OLED Init ==========
+// Wire ต้องถูก begin() ใน setup() ก่อนเรียกฟังก์ชันนี้
 void initOLED() {
-  if (!rtcAvailable)
-    Wire.begin(I2C_SDA, I2C_SCL);
   u8g2.begin();
   u8g2.clearBuffer();
   u8g2.setFont(u8g2_font_6x10_tf);
-  u8g2.drawStr(0, 28, "SPL+GPS+UV+DHT");
-  u8g2.drawStr(25, 45, "Starting...");
+  u8g2.drawStr(14, 24, "SPL+GPS Logger");
+  u8g2.setFont(u8g2_font_5x7_tf);
+  u8g2.drawStr(30, 40, "Initializing...");
   u8g2.sendBuffer();
   Serial.println("[INFO] OLED SH1106 initialized.");
+}
+
+// ========== Setup Status Display ==========
+// ใช้แสดงสถานะระหว่าง setup() — ไม่ใช้ mutex (ยังไม่มี task)
+// Layout (128x64):
+//  y= 8  [ SETUP ]
+//  y=10  ─────────────────────────── (line)
+//  y=26  <step> (font 6x10)
+//  y=40  <detail> (font 5x7)
+//  y=54  <extra> (font 5x7)
+void oledShowStatus(const char *step, const char *detail, const char *extra) {
+  u8g2.clearBuffer();
+
+  u8g2.setFont(u8g2_font_5x7_tf);
+  u8g2.drawStr(0, 8, "[ SETUP ]");
+  u8g2.drawHLine(0, 10, 128);
+
+  u8g2.setFont(u8g2_font_6x10_tf);
+  u8g2.drawStr(0, 26, step);
+
+  if (detail) {
+    u8g2.setFont(u8g2_font_5x7_tf);
+    u8g2.drawStr(0, 40, detail);
+  }
+  if (extra) {
+    u8g2.setFont(u8g2_font_5x7_tf);
+    u8g2.drawStr(0, 54, extra);
+  }
+
+  u8g2.sendBuffer();
 }
 
 // ========== OLED Layout (5 rows) ==========

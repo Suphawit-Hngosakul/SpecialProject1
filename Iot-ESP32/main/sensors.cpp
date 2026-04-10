@@ -2,14 +2,24 @@
 #include "globals.h"
 #include "rtc_helper.h"
 
-// ========== BH1750 Init ==========
+// ========== BH1750 Init (with retry) ==========
+// BH1750 อาจ fail ครั้งแรกหลัง WiFi operations หรือ I2C bus transient
+// → retry 3 ครั้ง ห่างกัน 200ms ก่อนยอมแพ้
 bool initBH1750() {
-  if (!lightMeter.begin(BH1750::CONTINUOUS_HIGH_RES_MODE)) {
-    Serial.println("[WARN] BH1750 not found! Check wiring & address.");
-    return false;
+  const int MAX_ATTEMPTS = 3;
+  for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    if (lightMeter.begin(BH1750::CONTINUOUS_HIGH_RES_MODE)) {
+      if (attempt > 1)
+        Serial.printf("[INFO] BH1750 initialized (attempt %d/%d).\n", attempt, MAX_ATTEMPTS);
+      else
+        Serial.println("[INFO] BH1750 initialized.");
+      return true;
+    }
+    Serial.printf("[WARN] BH1750 init attempt %d/%d failed, retrying...\n", attempt, MAX_ATTEMPTS);
+    delay(200);
   }
-  Serial.println("[INFO] BH1750 initialized.");
-  return true;
+  Serial.println("[WARN] BH1750 not found! Check wiring & address.");
+  return false;
 }
 
 // ========== UV Sensor Init ==========
@@ -200,7 +210,8 @@ void dhtTask(void *parameter) {
   Serial.printf("[%s] [INFO] DHT22 Task started (GPIO %d)\n",
                 getDateTimeString().c_str(), DHT_PIN);
 
-  vTaskDelay(3000 / portTICK_PERIOD_MS);
+  // setup() จัดการ warm-up แล้ว (SENSOR_WARMUP_SEC) — รอสั้นๆ ให้ task settle
+  vTaskDelay(500 / portTICK_PERIOD_MS);
 
   while (1) {
     float temp = dht.readTemperature();

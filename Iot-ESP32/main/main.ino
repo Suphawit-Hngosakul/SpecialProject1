@@ -18,26 +18,56 @@
 // ========== Setup ==========
 void setup() {
   Serial.begin(115200);
-  delay(1000);
+  delay(500);
   Serial.println("\n[INFO] Sound + GPS + Lux + UV + DHT22 Logger Starting...");
 
+  // ---- I2C bus init ก่อนเป็นอันดับแรก (shared: OLED + RTC + BH1750) ----
+  Wire.begin(I2C_SDA, I2C_SCL);
+  Wire.setClock(400000); // 400kHz
+
+  // ---- OLED ก่อนเลย — แสดงสถานะได้ตั้งแต่นาทีแรก ----
+  initOLED();
+
+  // ---- RTC ----
+  oledShowStatus("Init RTC...");
   rtcAvailable = initRTC();
   if (!rtcAvailable)
     Serial.println("[WARN] Running without RTC (using millis)");
+  oledShowStatus("RTC", rtcAvailable ? "DS3231 OK" : "No RTC (millis)");
+  delay(700);
 
-  Wire.setClock(400000); // 400kHz — ลด OLED sendBuffer จาก ~92ms → ~23ms
+  // ---- WiFi + NTP ----
+  oledShowStatus("WiFi", "Connecting...", WIFI_SSID);
   syncTimeNTP();
+  oledShowStatus("NTP", "Time synced");
+  delay(700);
 
+  // ---- Sensors ----
+  oledShowStatus("Sensors", "BH1750 / UV / DHT22");
   initBH1750();
   initUV();
   initDHT();
-  initOLED();
 
+  // ---- Sensor warm-up countdown ----
+  for (int i = SENSOR_WARMUP_SEC; i > 0; i--) {
+    char wbuf[20];
+    snprintf(wbuf, sizeof(wbuf), "Warmup: %ds...", i);
+    oledShowStatus("Sensor Warmup", "Stabilizing...", wbuf);
+    delay(1000);
+  }
+  oledShowStatus("Sensors", "Ready");
+  delay(500);
+
+  // ---- GPS UART ----
+  oledShowStatus("GPS", "UART2 starting...");
   gpsSerial.begin(GPS_BAUD, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
   Serial.printf("[%s] [INFO] GPS UART2 started (RX=%d TX=%d @ %d baud)\n",
                 getDateTimeString().c_str(), GPS_RX_PIN, GPS_TX_PIN, GPS_BAUD);
+  oledShowStatus("GPS", "UART2 Ready");
+  delay(500);
 
   // ---- SD Card Init ----
+  oledShowStatus("SD Card", "Initializing...");
   Serial.printf("[%s] [INFO] Initializing SD_MMC...\n",
                 getDateTimeString().c_str());
   pinMode(SDMMC_DAT0_PIN, INPUT_PULLUP);
@@ -48,11 +78,7 @@ void setup() {
   if (!SD_MMC.begin("/sdcard", true, false, 4000)) {
     Serial.printf("[%s] [ERROR] SD_MMC init failed! Restarting in 10s...\n",
                   getDateTimeString().c_str());
-    u8g2.clearBuffer();
-    u8g2.setFont(u8g2_font_6x10_tf);
-    u8g2.drawStr(10, 28, "SD CARD ERROR!");
-    u8g2.drawStr(10, 42, "Restart 10s...");
-    u8g2.sendBuffer();
+    oledShowStatus("SD Card", "ERROR!", "Restart 10s...");
     delay(10000);
     ESP.restart();
   }
@@ -61,6 +87,11 @@ void setup() {
       (SD_MMC.totalBytes() - SD_MMC.usedBytes()) / (1024 * 1024);
   Serial.printf("[%s] [INFO] SD OK. Free: %llu MB\n",
                 getDateTimeString().c_str(), freeSize);
+
+  char sdBuf[24];
+  snprintf(sdBuf, sizeof(sdBuf), "Free: %llu MB", freeSize);
+  oledShowStatus("SD Card", "Ready", sdBuf);
+  delay(700);
 
   // ---- Create CSV Log File ----
   String timestamp = getTimestamp();
@@ -81,6 +112,7 @@ void setup() {
   }
 
   // ---- Create Semaphores & Queues ----
+  oledShowStatus("System", "Creating queues...");
   freeQueue  = xQueueCreate(AUDIO_POOL_SIZE, sizeof(AudioBlock *));
   readyQueue = xQueueCreate(AUDIO_POOL_SIZE, sizeof(AudioBlock *));
   sdMutex    = xSemaphoreCreateMutex();
@@ -95,8 +127,9 @@ void setup() {
       !luxMutex || !uvMutex || !dhtMutex || !wireMutex) {
     Serial.printf("[%s] [ERROR] Failed to create Queue/Mutex! Restarting...\n",
                   getDateTimeString().c_str());
+    oledShowStatus("SYSTEM ERROR", "Queue/Mutex fail", "Restart 3s...");
     delay(3000);
-    ESP.restart(); // restart แทน infinite loop — watchdog ทำงานได้ถูกต้อง
+    ESP.restart();
   }
 
   for (int i = 0; i < AUDIO_POOL_SIZE; i++) {
@@ -104,14 +137,10 @@ void setup() {
     xQueueSend(freeQueue, &blk, 0);
   }
 
-  u8g2.clearBuffer();
-  u8g2.setFont(u8g2_font_6x10_tf);
-  u8g2.drawStr(20, 28, "SD OK!");
-  u8g2.drawStr(5, 42, "Starting tasks...");
-  u8g2.sendBuffer();
-  delay(1000);
-
   // ---- Start FreeRTOS Tasks ----
+  oledShowStatus("Ready!", "Starting tasks...");
+  delay(800);
+
   xTaskCreatePinnedToCore(micTask,       "micTask",       STACK_MIC,        NULL, 2, NULL, 1);
   xTaskCreatePinnedToCore(sdProcessTask, "sdProcessTask", STACK_SD_PROCESS, NULL, 1, NULL, 0);
   xTaskCreatePinnedToCore(gpsTask,       "gpsTask",       STACK_GPS,        NULL, 1, NULL, 0);

@@ -7,7 +7,9 @@
 static DateTime rtcNowSafe() {
   if (wireMutex) {
     DateTime ts(2000, 1, 1, 0, 0, 0); // fallback หาก mutex timeout
-    if (xSemaphoreTake(wireMutex, 20 / portTICK_PERIOD_MS)) {
+    // 100ms timeout: OLED sendBuffer ใช้เวลา ~25ms ที่ 400kHz
+    // 20ms เดิมทำให้ timeout บ่อยเมื่อ oledTask กำลัง hold mutex
+    if (xSemaphoreTake(wireMutex, 100 / portTICK_PERIOD_MS)) {
       ts = rtc.now();
       xSemaphoreGive(wireMutex);
     }
@@ -18,7 +20,7 @@ static DateTime rtcNowSafe() {
 }
 
 bool initRTC() {
-  Wire.begin(I2C_SDA, I2C_SCL);
+  // Wire ถูก init ใน setup() ก่อนเรียกฟังก์ชันนี้แล้ว — ไม่ต้อง begin อีก
   if (!rtc.begin()) {
     Serial.println("[WARN] DS3231 RTC not found!");
     return false;
