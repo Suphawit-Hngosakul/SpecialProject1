@@ -1,0 +1,93 @@
+%% Hardware Block Diagram — GPIO / Bus Connection
+%% Shows how each peripheral connects to ESP32
+
+flowchart LR
+    subgraph ESP["ESP32 DevKit v1<br/>Dual-core 240 MHz"]
+        direction TB
+        I2S_BUS["I2S Peripheral<br/>(DMA)"]
+        UART2["UART2"]
+        I2C_BUS["I2C Bus<br/>(Wire)"]
+        ONEWIRE["1-Wire"]
+        SDMMC["SDMMC<br/>1-bit mode"]
+        WIFI(("Wi-Fi<br/>2.4 GHz"))
+    end
+
+    subgraph AUDIO["🎙️ Audio Input"]
+        MIC["INMP441<br/>MEMS Microphone"]
+    end
+
+    subgraph GNSS["🛰️ Positioning"]
+        GPS["NEO-8M<br/>GPS Module"]
+    end
+
+    subgraph I2CDEV["🔗 I2C Devices (SDA=21, SCL=22)"]
+        OLED["OLED SH1106<br/>128×64<br/>addr 0x3C"]
+        RTC["DS3231 RTC<br/>+ Battery CR2032<br/>addr 0x68"]
+    end
+
+    subgraph CLIMATE["🌡️ Climate"]
+        DHT["DHT22<br/>(AM2302)"]
+    end
+
+    subgraph STORAGE["💾 Storage"]
+        SD["SD Card<br/>(FAT32)"]
+    end
+
+    subgraph POWER["⚡ Power"]
+        BAT["Power Bank /<br/>5V USB"]
+        REG["3.3V Regulator"]
+    end
+
+    subgraph NET["📡 Network"]
+        AP["Wi-Fi AP /<br/>Mobile Hotspot"]
+    end
+
+    %% I2S pins
+    MIC  ---|"SCK = GPIO 26"| I2S_BUS
+    MIC  ---|"WS  = GPIO 25"| I2S_BUS
+    MIC  ---|"SD  = GPIO 33"| I2S_BUS
+
+    %% UART2 pins
+    GPS  ---|"TX → RX = GPIO 16"| UART2
+    GPS  ---|"RX ← TX = GPIO 17"| UART2
+
+    %% I2C pins
+    OLED ---|"SDA = GPIO 21"| I2C_BUS
+    OLED ---|"SCL = GPIO 22"| I2C_BUS
+    RTC  ---|"SDA = GPIO 21"| I2C_BUS
+    RTC  ---|"SCL = GPIO 22"| I2C_BUS
+
+    %% 1-Wire
+    DHT  ---|"DATA = GPIO 23"| ONEWIRE
+
+    %% SD Card
+    SD   ---|"DAT0 = GPIO 2"|  SDMMC
+    SD   ---|"CLK  = GPIO 14"| SDMMC
+    SD   ---|"CMD  = GPIO 15"| SDMMC
+
+    %% Power
+    BAT --> REG
+    REG --> ESP
+    REG --> MIC
+    REG --> GPS
+    REG --> OLED
+    REG --> RTC
+    REG --> DHT
+    REG --> SD
+
+    %% Network
+    WIFI <-.->|"802.11 b/g/n"| AP
+
+    classDef mcu     fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#000
+    classDef sensor  fill:#fef3c7,stroke:#d97706,stroke-width:1.5px,color:#000
+    classDef display fill:#e9d5ff,stroke:#9333ea,stroke-width:1.5px,color:#000
+    classDef storage fill:#dcfce7,stroke:#16a34a,stroke-width:1.5px,color:#000
+    classDef power   fill:#fee2e2,stroke:#dc2626,stroke-width:1.5px,color:#000
+    classDef net     fill:#fce7f3,stroke:#db2777,stroke-width:1.5px,color:#000
+
+    class I2S_BUS,UART2,I2C_BUS,ONEWIRE,SDMMC,ADC,WIFI mcu
+    class MIC,GPS,DHT,RTC sensor
+    class OLED display
+    class SD storage
+    class BAT,REG power
+    class AP net

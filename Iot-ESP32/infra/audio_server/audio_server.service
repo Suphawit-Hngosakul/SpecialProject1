@@ -1,0 +1,19 @@
+[Unit]
+Description=ESP32 TCP Audio Stream Server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/opt/audio_server
+EnvironmentFile=/opt/audio_server/.env
+ExecStart=/usr/bin/python3 /opt/audio_server/server.py
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=audio-server
+
+[Install]
+WantedBy=multi-user.target

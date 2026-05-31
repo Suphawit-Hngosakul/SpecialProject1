@@ -1,0 +1,93 @@
+%% ESP32 SPL + Environmental Logger — System Architecture
+%% Render: https://mermaid.live  หรือ VSCode Mermaid Preview
+
+flowchart TB
+    %% ---------- 1) Sensors ----------
+    subgraph L1["🎯 1. Sensors"]
+        direction LR
+        MIC["🎙️ INMP441<br/>Microphone (I2S)"]
+        DHT["🌡️ DHT22<br/>Temp / Humidity"]
+        GPS["🛰️ NEO-8M<br/>GPS (UART)"]
+        RTC["⏰ DS3231<br/>RTC (I2C)"]
+    end
+
+    %% ---------- 2) ESP32 ----------
+    subgraph L2["⚙️ 2. ESP32 — FreeRTOS"]
+        direction TB
+        MICTASK["micTask<br/>(Core 1)"]
+        SENSE["Sensor Tasks<br/>gpsTask / dhtTask<br/>(Core 0)"]
+        SPLCALC["sdProcessTask<br/>SPL + CSV<br/>(Core 0)"]
+        NETTASK["influxTask<br/>(Core 0)"]
+        UITASK["oledTask<br/>(Core 0)"]
+    end
+
+    %% ---------- 3) Local I/O ----------
+    subgraph L3["💾 3. Local I/O"]
+        direction LR
+        OLED["🖥️ OLED SH1106"]
+        SD[("📂 SD Card<br/>CSV Log")]
+    end
+
+    %% ---------- 4) Cloud ----------
+    subgraph L4["☁️ 4. Cloud (AWS EC2)"]
+        direction LR
+        INFLUX[("📊 InfluxDB")]
+        GRAFANA["📈 Grafana"]
+        NTP["🕐 NTP Server"]
+    end
+
+    %% ---------- 5) 3D Web Visualization ----------
+    subgraph L5["🌐 5. 3D Web Visualization"]
+        direction LR
+        WEBAPP["Three.js / Cesium<br/>(WebGL)"]
+        SUN["☀️ Sun-Path<br/>& Shadow"]
+        WATER["💧 Canal Water<br/>Level"]
+        HEAT["🗺️ Heatmap"]
+    end
+
+    USER(["👤 User"])
+
+    %% ---------- Flows ----------
+    MIC --> MICTASK
+    DHT --> SENSE
+    GPS --> SENSE
+    RTC --> SPLCALC
+
+    MICTASK --> SPLCALC
+    SENSE --> SPLCALC
+    SENSE --> NETTASK
+    SPLCALC --> NETTASK
+    SPLCALC --> UITASK
+    SENSE --> UITASK
+
+    UITASK --> OLED
+    SPLCALC --> SD
+    NETTASK ==> INFLUX
+
+    INFLUX --> GRAFANA
+    INFLUX --> WEBAPP
+    NTP -.-> RTC
+
+    WEBAPP --> SUN
+    WEBAPP --> WATER
+    WEBAPP --> HEAT
+
+    SUN --> USER
+    WATER --> USER
+    HEAT --> USER
+    GRAFANA --> USER
+
+    %% ---------- Styling ----------
+    classDef sensor  fill:#fef3c7,stroke:#d97706,stroke-width:2px,color:#000
+    classDef task    fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#000
+    classDef storage fill:#dcfce7,stroke:#16a34a,stroke-width:2px,color:#000
+    classDef cloud   fill:#fce7f3,stroke:#db2777,stroke-width:2px,color:#000
+    classDef web     fill:#e9d5ff,stroke:#9333ea,stroke-width:2px,color:#000
+    classDef user    fill:#fee2e2,stroke:#dc2626,stroke-width:2px,color:#000
+
+    class MIC,DHT,GPS,RTC sensor
+    class MICTASK,SENSE,SPLCALC,NETTASK,UITASK task
+    class OLED,SD storage
+    class INFLUX,GRAFANA,NTP cloud
+    class WEBAPP,SUN,WATER,HEAT web
+    class USER user

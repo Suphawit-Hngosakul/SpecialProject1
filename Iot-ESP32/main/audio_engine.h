@@ -5,7 +5,7 @@
 #include <Arduino.h>
 #include <FS.h>
 
-// ========== WAV Header ==========
+
 struct WAVHeader {
   char riff[4] = {'R', 'I', 'F', 'F'};
   uint32_t fileSize;
@@ -22,7 +22,6 @@ struct WAVHeader {
   uint32_t dataSize;
 };
 
-void i2s_install();
 void createWAVHeader(WAVHeader &h, uint32_t dataSize);
 void writeWAVHeader(File &file, uint32_t dataSize);
 void micTask(void *parameter);

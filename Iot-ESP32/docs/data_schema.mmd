@@ -1,0 +1,60 @@
+erDiagram
+%% Data Schema Diagram — CSV (offline) + InfluxDB (online)
+%% Shows how a single measurement maps to both storage formats
+    MEASUREMENT_EVENT ||--|| CSV_ROW : "writes (offline)"
+    MEASUREMENT_EVENT ||--|| INFLUX_POINT : "sends (online)"
+
+    MEASUREMENT_EVENT {
+        datetime timestamp "DS3231 / NTP-synced"
+        float   spl_db    "SPL in dB"
+        float   temp_c    "DHT22 °C"
+        float   humi_pct  "DHT22 %RH"
+        float   lat       "GPS lat (decimal)"
+        float   lng       "GPS lng (decimal)"
+        float   alt_m     "GPS altitude"
+        float   speed     "GPS speed (m/s)"
+        int     sats      "satellites in view"
+        float   hdop      "horizontal DOP"
+        bool    dht_ok    "DHT22 valid"
+        bool    gps_ok    "GPS valid (HDOP < 5)"
+    }
+
+    CSV_ROW {
+        string filename       "SPL_YYYYMMDD.csv"
+        string timestamp_str  "YYYY-MM-DD HH:MM:SS"
+        float  spl
+        float  temp
+        float  humi
+        float  lat
+        float  lng
+        float  alt
+        int    sats
+        float  hdop
+    }
+
+    INFLUX_POINT {
+        string measurement "spl_logger"
+        string tag_device  "esp32-spl-001"
+        float  field_spl
+        float  field_temp
+        float  field_humi
+        bool   field_dht_ok
+        float  field_lat
+        float  field_lng
+        float  field_alt
+        float  field_speed
+        int    field_sats
+        float  field_hdop
+        bool   field_gps_ok
+        int64  timestamp_ns "nanoseconds since epoch"
+    }
+
+    WAV_FILE ||--o{ MEASUREMENT_EVENT : "covers ~60 s of"
+    WAV_FILE {
+        string filename     "REC_YYYYMMDD_HHMMSS.wav"
+        int    sample_rate  "16000 Hz"
+        int    bit_depth    "16-bit PCM"
+        int    channels     "1 (mono)"
+        int    duration_s   "60"
+        int    bytes        "~1.9 MB"
+    }

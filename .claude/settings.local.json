@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git -C d:/PJTest/SpecialProject1 diff --stat main...HEAD -- Iot-ESP32/)"
+    ]
+  }
+}

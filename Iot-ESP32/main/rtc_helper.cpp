@@ -1,26 +1,28 @@
 #include "rtc_helper.h"
 #include "globals.h"
 
-// ---- wireMutex-safe rtc.now() ----
-// ถ้า wireMutex ยัง NULL (ช่วง setup ก่อน task start) → เรียกตรงได้เลย ไม่มี race
-// ถ้า wireMutex มีค่าแล้ว (tasks ทำงานอยู่) → ต้อง lock ก่อนเสมอ
+
+// =============================================================================
+//  Private — read RTC under wireMutex
+// =============================================================================
+
 static DateTime rtcNowSafe() {
-  if (wireMutex) {
-    DateTime ts(2000, 1, 1, 0, 0, 0); // fallback หาก mutex timeout
-    // 100ms timeout: OLED sendBuffer ใช้เวลา ~25ms ที่ 400kHz
-    // 20ms เดิมทำให้ timeout บ่อยเมื่อ oledTask กำลัง hold mutex
-    if (xSemaphoreTake(wireMutex, 100 / portTICK_PERIOD_MS)) {
-      ts = rtc.now();
-      xSemaphoreGive(wireMutex);
-    }
-    return ts;
-  }
-  // wireMutex == NULL → อยู่ใน setup(), ไม่มี concurrent task
-  return rtc.now();
+  // During setup() before initQueuesAndMutexes(), wireMutex is NULL.
+  // No concurrent I2C access exists yet, so read directly.
+  if (!wireMutex) return rtc.now();
+
+  DateTime ts(2000, 1, 1, 0, 0, 0);
+  MutexLock lock(wireMutex, 100);
+  if (lock) ts = rtc.now();
+  return ts;
 }
 
+
+// =============================================================================
+//  Public API
+// =============================================================================
+
 bool initRTC() {
-  // Wire ถูก init ใน setup() ก่อนเรียกฟังก์ชันนี้แล้ว — ไม่ต้อง begin อีก
   if (!rtc.begin()) {
     Serial.println("[WARN] DS3231 RTC not found!");
     return false;
@@ -29,37 +31,41 @@ bool initRTC() {
     Serial.println("[WARN] RTC lost power, setting default time...");
     rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
   }
-  DateTime ts = rtc.now(); // ปลอดภัย: initRTC() เรียกก่อน task ใดๆ start
-  Serial.printf("[INFO] RTC: %04d-%02d-%02d %02d:%02d:%02d\n", ts.year(),
-                ts.month(), ts.day(), ts.hour(), ts.minute(), ts.second());
+  DateTime ts = rtc.now();
+  Serial.printf("[INFO] RTC: %04d-%02d-%02d %02d:%02d:%02d\n",
+                ts.year(), ts.month(), ts.day(),
+                ts.hour(), ts.minute(), ts.second());
   return true;
 }
 
-String getTimestamp() {
-  if (!rtcAvailable)
-    return String(millis());
+
+void getDateTimeStr(char *buf, size_t len) {
+  if (!rtcAvailable) {
+    snprintf(buf, len, "%lu", millis() / 1000);
+    return;
+  }
   DateTime ts = rtcNowSafe();
-  char buf[32];
-  snprintf(buf, sizeof(buf), "%04d%02d%02d_%02d%02d%02d", ts.year(), ts.month(),
-           ts.day(), ts.hour(), ts.minute(), ts.second());
-  return String(buf);
+  snprintf(buf, len, "%04d-%02d-%02d %02d:%02d:%02d",
+           ts.year(), ts.month(), ts.day(),
+           ts.hour(), ts.minute(), ts.second());
 }
 
-String getDateTimeString() {
-  if (!rtcAvailable)
-    return String(millis() / 1000);
+void getTimestampStr(char *buf, size_t len) {
+  if (!rtcAvailable) {
+    snprintf(buf, len, "%lu", millis());
+    return;
+  }
   DateTime ts = rtcNowSafe();
-  char buf[32];
-  snprintf(buf, sizeof(buf), "%04d-%02d-%02d %02d:%02d:%02d", ts.year(),
-           ts.month(), ts.day(), ts.hour(), ts.minute(), ts.second());
-  return String(buf);
+  snprintf(buf, len, "%04d%02d%02d_%02d%02d%02d",
+           ts.year(), ts.month(), ts.day(),
+           ts.hour(), ts.minute(), ts.second());
 }
 
-String getDateFolder() {
-  if (!rtcAvailable)
-    return "/logs";
+void getDateFolderStr(char *buf, size_t len) {
+  if (!rtcAvailable) {
+    snprintf(buf, len, "/logs");
+    return;
+  }
   DateTime ts = rtcNowSafe();
-  char buf[16];
-  snprintf(buf, sizeof(buf), "/%04d%02d%02d", ts.year(), ts.month(), ts.day());
-  return String(buf);
+  snprintf(buf, len, "/%04d%02d%02d", ts.year(), ts.month(), ts.day());
 }

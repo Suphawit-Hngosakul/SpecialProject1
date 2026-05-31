@@ -1,0 +1,73 @@
+%% AWS Cloud Infrastructure / Deployment Diagram
+%% Shows EC2, Docker containers, S3, Security Group, and external access
+
+flowchart TB
+    subgraph FIELD["📍 Field — Test Site (Thammasat Rangsit)"]
+        DEV["ESP32 Logger Node<br/>(Edge Device)"]
+    end
+
+    subgraph INTERNET["🌐 Internet"]
+        AP["Wi-Fi AP /<br/>Mobile Hotspot"]
+    end
+
+    subgraph AWS["☁️ Amazon Web Services (ap-southeast-1)"]
+        direction TB
+
+        subgraph VPC["🔐 VPC — Public Subnet"]
+            subgraph EC2["💻 EC2 Instance (Ubuntu)<br/>Elastic IP: 52.221.18.227"]
+
+                subgraph DOCKER["🐳 Docker Engine"]
+                    INF["InfluxDB 2.x<br/>:8086<br/><i>bucket: spl-logger</i><br/><i>org: c727d2245281d811</i>"]
+                    GRAF["Grafana<br/>:3000"]
+                end
+            end
+
+            SG{{"Security Group<br/>Inbound: 22, 8086, 3000"}}
+        end
+
+        S3[("S3 Bucket<br/><i>WAV backup<br/>(future use)</i>")]
+    end
+
+    subgraph CLIENTS["👥 Clients"]
+        ADMIN["🛠️ Admin / DevOps<br/>SSH :22"]
+        USER["👤 End User<br/>3D Web App"]
+        DASH["📊 Researcher<br/>Grafana"]
+    end
+
+    subgraph TF["🏗️ Infrastructure as Code"]
+        OPENTOFU["OpenTofu / Terraform<br/><i>infra/ directory</i>"]
+    end
+
+    %% Data flow
+    DEV -->|"Wi-Fi 2.4 GHz"| AP
+    AP -->|"HTTP POST<br/>Line Protocol"| SG
+    SG -->|":8086"| INF
+    SG -->|":3000"| GRAF
+    SG -->|":22"| EC2
+
+    INF <-->|"data source"| GRAF
+    INF -.->|"backup<br/>(scheduled)"| S3
+
+    USER -->|"HTTPS"| INF
+    DASH -->|"HTTPS :3000"| GRAF
+    ADMIN -->|"SSH"| EC2
+
+    OPENTOFU -.->|"provision"| AWS
+
+    classDef edge fill:#fef3c7,stroke:#d97706,stroke-width:2px,color:#000
+    classDef net fill:#fce7f3,stroke:#db2777,stroke-width:1.5px,color:#000
+    classDef compute fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#000
+    classDef container fill:#dcfce7,stroke:#16a34a,stroke-width:1.5px,color:#000
+    classDef storage fill:#e9d5ff,stroke:#9333ea,stroke-width:1.5px,color:#000
+    classDef sec fill:#fee2e2,stroke:#dc2626,stroke-width:1.5px,color:#000
+    classDef client fill:#fed7aa,stroke:#ea580c,stroke-width:1.5px,color:#000
+    classDef iac fill:#fef9c3,stroke:#ca8a04,stroke-width:1.5px,color:#000
+
+    class DEV edge
+    class AP net
+    class EC2 compute
+    class INF,GRAF container
+    class S3 storage
+    class SG sec
+    class ADMIN,USER,DASH client
+    class OPENTOFU iac

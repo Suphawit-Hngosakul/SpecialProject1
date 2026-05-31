@@ -1,0 +1,95 @@
+%% FreeRTOS Task & Synchronization Diagram
+%% Shows tasks, queues, mutexes, and inter-task communication
+
+flowchart TB
+    subgraph CORE1["🔵 Core 1 — Audio (Real-time)"]
+        MIC["<b>micTask</b><br/>Priority 2<br/>Stack: 4 KB<br/><i>WDT enabled</i>"]
+    end
+
+    subgraph CORE0["🟢 Core 0 — Sensor & Network"]
+        SD["<b>sdProcessTask</b><br/>Priority 1<br/>Stack: 8 KB"]
+        GPS["<b>gpsTask</b><br/>Priority 1<br/>Stack: 4 KB"]
+        DHT["<b>dhtTask</b><br/>Priority 1<br/>Stack: 4 KB"]
+        OLED["<b>oledTask</b><br/>Priority 1<br/>Stack: 4 KB"]
+        INF["<b>influxTask</b><br/>Priority 1<br/>Stack: 8 KB"]
+    end
+
+    subgraph SYNC["🔒 Synchronization Primitives"]
+        QUEUE[("readyQueue<br/>FIFO — AudioBlock")]
+        SDMUTEX{{"sdMutex<br/>SD_MMC access"}}
+        OLEDMUTEX{{"oledMutex<br/>display vars"}}
+        GPSMUTEX{{"gpsMutex<br/>gps vars"}}
+        DHTMUTEX{{"dhtMutex<br/>temp / humid"}}
+        WIREMUTEX{{"wireMutex<br/>I2C bus"}}
+        WIFIMUTEX{{"wifiMutex<br/>WiFi.begin()"}}
+    end
+
+    subgraph SHARED["📦 Shared State (Global)"]
+        SPL["currentSPL"]
+        GPSVARS["gpsLat / gpsLng /<br/>gpsAlt / hdop / sats"]
+        DHTVARS["dhtTemp /<br/>dhtHumidity"]
+        DISP["display* vars"]
+        REC["isRecording /<br/>dbFileName"]
+    end
+
+    subgraph HW["⚙️ Hardware Resources"]
+        I2S["I2S Peripheral"]
+        SDCARD[("SD Card")]
+        OLEDHW["OLED SH1106"]
+        DHTHW["DHT22"]
+        GPSHW["GPS UART2"]
+        WIFI(("Wi-Fi"))
+    end
+
+    %% Producer-Consumer
+    I2S -.->|"read"| MIC
+    MIC -->|"xQueueSend"| QUEUE
+    QUEUE -->|"xQueueReceive"| SD
+
+    %% Sensor reads
+    DHTHW -.->|"1-Wire"| DHT
+    GPSHW -.->|"NMEA"| GPS
+
+    %% Mutex protection
+    DHT -.->|"acquire"| DHTMUTEX
+    DHTMUTEX --> DHTVARS
+
+    GPS -.->|"acquire"| GPSMUTEX
+    GPSMUTEX --> GPSVARS
+
+    SD -.->|"acquire"| SDMUTEX
+    SDMUTEX --> SDCARD
+    SD --> SPL
+    SD --> REC
+
+    OLED -.->|"acquire"| OLEDMUTEX
+    OLED -.->|"acquire"| WIREMUTEX
+    WIREMUTEX --> OLEDHW
+    OLEDMUTEX --> DISP
+
+    %% Readers
+    INF -.->|"readXxxSafe()"| DHTMUTEX
+    INF -.->|"readXxxSafe()"| GPSMUTEX
+    INF --> SPL
+    INF -.->|"acquire"| WIFIMUTEX
+    WIFIMUTEX --> WIFI
+
+    OLED -.->|"readXxxSafe()"| DHTMUTEX
+    OLED -.->|"readXxxSafe()"| GPSMUTEX
+    OLED --> SPL
+    OLED --> DISP
+    OLED --> REC
+
+    classDef coreA fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#000
+    classDef coreB fill:#dcfce7,stroke:#16a34a,stroke-width:2px,color:#000
+    classDef mutex fill:#fef9c3,stroke:#ca8a04,stroke-width:1.5px,color:#000
+    classDef queue fill:#fed7aa,stroke:#ea580c,stroke-width:1.5px,color:#000
+    classDef shared fill:#e9d5ff,stroke:#9333ea,stroke-width:1.5px,color:#000
+    classDef hw fill:#fee2e2,stroke:#dc2626,stroke-width:1.5px,color:#000
+
+    class MIC coreA
+    class SD,GPS,DHT,OLED,INF coreB
+    class SDMUTEX,OLEDMUTEX,GPSMUTEX,DHTMUTEX,WIREMUTEX,WIFIMUTEX mutex
+    class QUEUE queue
+    class SPL,GPSVARS,DHTVARS,DISP,REC shared
+    class I2S,SDCARD,OLEDHW,DHTHW,GPSHW,WIFI hw

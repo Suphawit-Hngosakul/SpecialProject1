@@ -1,0 +1,59 @@
+sequenceDiagram
+%% Dual Logging Sequence Diagram
+%% Shows one measurement cycle with both offline (SD) and online (Cloud) paths
+    autonumber
+    participant MIC as 🎙️ INMP441<br/>(I2S)
+    participant SENS as 🌡️ DHT22/GPS
+    participant ESP as ⚙️ ESP32<br/>(FreeRTOS)
+    participant SD as 💾 SD Card<br/>(CSV)
+    participant WIFI as 📡 Wi-Fi
+    participant INFLUX as ☁️ InfluxDB<br/>(AWS EC2)
+    participant WEB as 🌐 3D Web App
+
+    Note over MIC,ESP: Audio path runs at 16 kHz continuously
+    MIC->>ESP: I2S DMA block (BUFFER_LEN = 512 samples)
+    activate ESP
+    ESP->>ESP: micTask: enqueue AudioBlock
+    ESP->>ESP: sdProcessTask: dequeue → compute RMS<br/>→ EMA smooth → currentSPL (dB)
+    deactivate ESP
+
+    Note over SENS,ESP: Sensor tasks run on their own intervals
+    SENS-->>ESP: DHT22 (2 s), GPS NMEA (1 Hz)
+    activate ESP
+    ESP->>ESP: Update sensor globals<br/>(mutex-protected)
+    deactivate ESP
+
+    rect rgba(220, 252, 231, 0.5)
+        Note over ESP,SD: 📂 Offline path (every 1 s) — Always runs
+        ESP->>ESP: getDateTimeStr() ← DS3231 RTC
+        ESP->>SD: write CSV row<br/>timestamp, spl, temp, humi, lat, lng, ...
+        SD-->>ESP: ✅ OK / ❌ SD error
+        alt SD error ≥ threshold
+            ESP->>ESP: sdHealthy = false<br/>stop recording
+        end
+    end
+
+    rect rgba(252, 231, 243, 0.5)
+        Note over ESP,INFLUX: ☁️ Online path (every 1 s, batch 5)
+        ESP->>ESP: readXxxSafe() — collect snapshot
+        ESP->>ESP: Build Line Protocol payload
+        ESP->>WIFI: ensureWiFiConnected()<br/>(wifiMutex)
+        WIFI-->>ESP: connected / reconnecting
+
+        alt Wi-Fi connected
+            ESP->>+INFLUX: POST /api/v2/write<br/>Authorization: Token ...
+            INFLUX-->>-ESP: HTTP 204 / 5xx
+            alt success
+                ESP->>ESP: backoff.reset()
+            else fail
+                ESP->>ESP: backoff.nextMs()<br/>(1.5 s × 2 → 60 s cap)
+            end
+        else Wi-Fi down
+            ESP->>ESP: skip — retry next cycle<br/><b>(data still in SD)</b>
+        end
+    end
+
+    Note over INFLUX,WEB: Visualization layer (independent of device)
+    WEB->>INFLUX: Flux query<br/>last 15 min, by geo
+    INFLUX-->>WEB: Time-series JSON
+    WEB->>WEB: Render markers + heatmap<br/>+ Sun-Path + Water Level

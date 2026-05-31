@@ -1,0 +1,56 @@
+stateDiagram-v2
+%% Boot Sequence & Runtime State Machine
+%% Shows initialization order + runtime states (Wi-Fi, SD, recording)
+    [*] --> PowerOn
+
+    PowerOn --> BootInit : setup()
+    state BootInit {
+        [*] --> InitSerial
+        InitSerial --> InitWDT : Task Watchdog<br/>(10 s timeout)
+        InitWDT --> InitI2C : Wire.begin(SDA=21, SCL=22)
+        InitI2C --> InitRTC : DS3231 init
+        InitRTC --> InitOLED : SH1106 init
+        InitOLED --> InitSD : SD_MMC.begin()
+        InitSD --> InitI2S : i2s_install()
+        InitI2S --> InitSensors : DHT22 / GPS UART
+        InitSensors --> CreateQueues : Queues + Mutexes
+        CreateQueues --> CreateTasks : xTaskCreatePinnedToCore()
+        CreateTasks --> [*]
+    }
+
+    BootInit --> Running : setup() returns
+
+    state Running {
+        [*] --> Offline
+        Offline --> Connecting : startWiFi()
+        Connecting --> Online : WL_CONNECTED
+        Connecting --> Offline : timeout (10 s)
+        Online --> Offline : WiFi.disconnect /<br/>lost connection
+        Offline --> Connecting : retry (backoff)
+
+        Online --> Syncing : on first connect
+        Syncing --> Online : NTP → RTC updated
+
+        --
+        [*] --> Recording
+        Recording --> Paused : SD error ≥ threshold
+        Paused --> Recording : SD healthy again
+        Recording --> Stopped : user request /<br/>card full
+        Stopped --> Recording : restart
+    }
+
+    Running --> Reboot : WDT timeout /<br/>panic
+    Reboot --> PowerOn : esp_restart()
+
+    note right of BootInit
+        Init order is critical:
+        I2C → RTC → OLED → SD → I2S
+        WDT MUST be initialized first
+    end note
+
+    note right of Running
+        Online + Offline are
+        orthogonal regions:
+        device records to SD
+        regardless of Wi-Fi
+    end note

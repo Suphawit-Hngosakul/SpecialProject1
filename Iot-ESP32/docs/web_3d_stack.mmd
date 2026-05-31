@@ -1,0 +1,98 @@
+%% 3D Web Visualization — Frontend Stack
+%% Shows layers from browser runtime up to user-facing simulations
+
+flowchart TB
+    subgraph BROWSER["🌐 Web Browser (Client)"]
+        direction TB
+
+        subgraph PRES["🎨 Presentation Layer"]
+            UI["UI Components<br/>(HTML / CSS / Controls)"]
+            TIME["⏱️ Time Slider<br/>(วัน / ชั่วโมง / ฤดูกาล)"]
+            PANEL["📊 Info Panel<br/>(SPL, Temp, Humid)"]
+        end
+
+        subgraph SIM["🎯 Simulation Layer"]
+            SUN["☀️ Sun-Path &<br/>Shadow Simulation"]
+            WATER["💧 Canal Water Level<br/>Simulation"]
+            HEAT["🗺️ Spatio-temporal<br/>Heatmap (SPL/Temp)"]
+        end
+
+        subgraph SCENE["🏙️ Scene Layer"]
+            MODELS["3D Models<br/>(glTF / OBJ / FBX)<br/><i>อาคารธรรมศาสตร์</i>"]
+            TERRAIN["Terrain & Streets<br/>(CityGML / Cesium tiles)"]
+            MARKERS["Sensor Markers<br/>(พิกัด GPS)"]
+            LIGHT["DirectionalLight<br/>+ Shadow Mapping"]
+        end
+
+        subgraph LIB["📚 3D Library Layer"]
+            THREE["Three.js<br/><i>Scene / Camera / Renderer</i>"]
+            CESIUM["Cesium.js<br/><i>Geo-referenced globe</i>"]
+            SUNCALC["SunCalc.js<br/><i>Sun position calc</i>"]
+        end
+
+        subgraph RUNTIME["⚙️ Runtime"]
+            WEBGL["WebGL 2.0<br/>(OpenGL ES 3.0)"]
+            JS["JavaScript Engine<br/>+ DOM"]
+        end
+
+        subgraph DATA["📡 Data Layer"]
+            FETCH["fetch() / WebSocket"]
+            CACHE["LocalStorage<br/>cache + tile cache"]
+        end
+    end
+
+    subgraph BACKEND["☁️ Backend Services"]
+        INFLUX[("InfluxDB<br/>Flux Query API")]
+        TILES[("3D Tile Server<br/>(static / CDN)")]
+    end
+
+    %% Vertical stack
+    PRES --> SIM
+    SIM --> SCENE
+    SCENE --> LIB
+    LIB --> RUNTIME
+
+    TIME -.->|"date/time"| SUN
+    PANEL -.->|"select sensor"| MARKERS
+
+    %% Sim → Scene
+    SUN --> LIGHT
+    SUN --> MODELS
+    WATER --> TERRAIN
+    HEAT --> MARKERS
+
+    %% Lib bindings
+    LIGHT --> THREE
+    MODELS --> THREE
+    TERRAIN --> CESIUM
+    MARKERS --> CESIUM
+    SUN --> SUNCALC
+
+    %% Runtime
+    THREE --> WEBGL
+    CESIUM --> WEBGL
+    SUNCALC --> JS
+
+    %% Data
+    DATA --> SIM
+    HEAT --> FETCH
+    MARKERS --> FETCH
+    FETCH --> INFLUX
+    TERRAIN --> TILES
+    FETCH --> CACHE
+
+    classDef pres fill:#fef3c7,stroke:#d97706,stroke-width:1.5px,color:#000
+    classDef sim fill:#fed7aa,stroke:#ea580c,stroke-width:1.5px,color:#000
+    classDef scene fill:#dbeafe,stroke:#2563eb,stroke-width:1.5px,color:#000
+    classDef lib fill:#dcfce7,stroke:#16a34a,stroke-width:1.5px,color:#000
+    classDef runtime fill:#e9d5ff,stroke:#9333ea,stroke-width:1.5px,color:#000
+    classDef data fill:#fce7f3,stroke:#db2777,stroke-width:1.5px,color:#000
+    classDef backend fill:#fee2e2,stroke:#dc2626,stroke-width:1.5px,color:#000
+
+    class UI,TIME,PANEL pres
+    class SUN,WATER,HEAT sim
+    class MODELS,TERRAIN,MARKERS,LIGHT scene
+    class THREE,CESIUM,SUNCALC lib
+    class WEBGL,JS runtime
+    class FETCH,CACHE data
+    class INFLUX,TILES backend
